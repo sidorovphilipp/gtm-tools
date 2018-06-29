@@ -1,22 +1,36 @@
-// Здесь ссылки для примера, замените их на свои.
-SPREADSHEET_URL = 'https://docs.google.com/spreadsheets/d/1VVa2idKfRwzgDLlXF9d7YJpqS2rVU-Z8pQw8-8AEk/edit'
+// Эти ссылки для примера, замените их на свои
+SPREADSHEET_URL = 'https://docs.google.com/spreadsheets/d/1VVa2iK34fRnTXF9d7YJpqS2rVU-Z8pQw8-8AEk/edit'
 SHEET = SpreadsheetApp.openByUrl(SPREADSHEET_URL).getActiveSheet()
-WORKSPACE = 'accounts/23423423/containers/4234/workspaces/8'
+WORKSPACE = 'accounts/17545317/containers/19457/workspaces/8'
 
 /**
  * Выгружает имя тега, тип и json-тэга на лист в Sheets.
  * Перед  json делают отступ в колонку.
  */
-function dumpTagsToSheet(workspacepath) {
+function dumpTagsToSheet() {
   SHEET.clear()
 
   var data = []
-  
-  response = TagManager.Accounts.Containers.Workspaces.Tags.list(workspacepath)
+ 
+  response = TagManager.Accounts.Containers.Workspaces.Tags.list(WORKSPACE)
      
-  for (var i=0;  i<response.tag.length; i++) {
+  for (var i = 0;  i < response.tag.length; i++) {
    var tag = response.tag[i]
-   SHEET.appendRow([tag.name, tag.type, '', '', '', JSON.stringify(tag)])
+   var trackType = ''
+   
+   Logger.log(tag.parameter[0])
+   
+   // Если UA, то узнать Event или Pageview
+   for (var j = 0; j < tag.parameter.length; j++) {
+     var prm = tag.parameter[j]
+     
+     
+     if (prm.key == 'trackType') {
+       trackType = prm.value
+     }
+   }
+   
+   SHEET.appendRow([tag.name, tag.type, trackType, '', '', JSON.stringify(tag)])
   }
   
 }
