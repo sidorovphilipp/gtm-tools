@@ -1,98 +1,132 @@
-// Эти ссылки для примера, замените их на свои.
-SPREADSHEET_URL = 'https://docs.google.com/spreadsheets/d/1VVa2iKfRnTsdf7YJpqS2rVU-Z8pQw8-8AEk/edit';
-SHEET = SpreadsheetApp.openByUrl(SPREADSHEET_URL).getActiveSheet();
-WORKSPACE = 'accounts/1444045317/containers/193634317/workspaces/8';
+// Эти ссылки для примера, замените их на свои
+var SPSHEET = SpreadsheetApp.getActiveSpreadsheet();
+var SHEET = SPSHEET.getActiveSheet();
+var WORKSPACE = 'accounts/144014/containers/2443029/workspaces/2143';
+
+
+var RULES = {
+  "v":                   "dlv",
+  "j":                   "jsv",
+  "k":                   "cookie",
+  "jsm":                 "cjsv",
+  "gas":                 "gas",
+  "c":                   "const",
+  "customEvent":         "ce",
+  "timer":               "timer",
+  "jsError":             "jserr",
+  "click":               "click",
+  "pageview":            "pageview",
+  "linkClick":           "click",
+  "click":               "click",
+  "domReady":            "dom",
+  "windowLoaded":        "window",
+  "historyChange":       "hist",
+  "ua track_event":      "GA Event",
+  "ua track_pageview":   "GA Pageview",
+  "html":                "Script"
+};
+
+
+// Обёртка, чтобы cразу выгрузить тэги, триггеры и прочее.
+function dumpGTM() {
+  dumpEntsToSheets('Tag');
+  dumpEntsToSheets('Trigger');
+  dumpEntsToSheets('Variable');
+}
+
+
+// Обёртка, чтобы обновить сущности в GTM.
+function updateGTM() {
+  updateEntsFromSheet('Variable');
+  updateEntsFromSheet('Trigger');
+  updateEntsFromSheet('Tag');
+}
+
 
 /**
- * Выгружает имя тега, тип и json-тэга на лист в Sheets.
+ * Выгружает имя cущности и json-объекта на лист в Sheets.
  * Перед  json делают отступ в колонку.
  */
-function dumpTagsToSheet() {
-  SHEET.clear();
-
+function dumpEntsToSheets(kind) {
+  refreshList(kind);  
   var data = [];
- 
-  response = TagManager.Accounts.Containers.Workspaces.Tags.list(WORKSPACE);
-     
-  for (var i = 0;  i < response.tag.length; i++) {
-   var tag = response.tag[i];
-   var trackType = '';
    
-   Logger.log(tag.parameter[0]);
-   
-   // Если UA, то узнать Event или Pageview
-   for (var j = 0; j < tag.parameter.length; j++) {
-     var prm = tag.parameter[j];
-     
-     
-     if (prm.key == 'trackType') {
-       trackType = prm.value;
-     }
-   }
-   
-   SHEET.appendRow([
-     tag.name, 
-     tag.type, 
-     trackType,
-     beautifyName(tag.name, tag.type, trackType),
-     '', '', '',
-     JSON.stringify(tag)]);
+  if (kind === 'Tag') {
+    var response = TagManager.Accounts.Containers.Workspaces.Tags.list(WORKSPACE);
+    var respData = response['tag'];
+  } else if (kind === 'Trigger') {
+    var response = TagManager.Accounts.Containers.Workspaces.Triggers.list(WORKSPACE);
+    var respData = response['trigger'];
+  } else if (kind === 'Variable') {
+    var response = TagManager.Accounts.Containers.Workspaces.Variables.list(WORKSPACE);
+    var respData = response['variable'];
   }
-  
+     
+  for (var i = 0;  i < respData.length; i++) {
+   var ent = respData[i];
+   var trackType = "";
+      
+   // Если Universal Analytics, узнает Event или Pageview.
+   if (ent.type === "ua") {
+     for (var j = 0; j < ent.parameter.length; j++) {
+       var prm = ent.parameter[j];    
+       
+       if (prm.key === "trackType") {
+         trackType = prm.value;
+       }
+     } 
+   } 
+    
+   sheet.appendRow([
+     ent.name, 
+     ent.type + " " + trackType.toLowerCase(),
+     "", "", "", "", "",
+     JSON.stringify(ent)]);
+  }  
 }
 
 
 /**
  * Читает строчки с листа, изменяет имя в json-объекте 
- * и обновляет тэги в GTM.
+ * и засылает сущности в GTM.
  */
-function updateTagsFromSheet() {
-  var data = SHEET.getSheetValues(1, 1, SHEET.getLastRow(), SHEET.getLastColumn());
+function updateEntsFromSheet(sheetName) {
+  var sheet = SPSHEET.getSheetByName(sheetName);
+  var data = sheet.getSheetValues(1, 1, sheet.getLastRow(), sheet.getLastColumn());
   
   // Перезаписываем имена в тэгах и отсылаем в GTM.
   for (var i = 0; i < data.length; i++) {
-    var tag = JSON.parse(data[i][7]);
-    tag.name = data[i][3];
+    var ent = JSON.parse(data[i][7]);
     
-    if (tag.name !== '') {
+    // Берём имя из 4-й колонки, если там что-то есть.    
+    if (data[i][3] !== "") {
+      ent.name = data[i][3];
       TagManager.Accounts.Containers.Workspaces.Tags.update(
-        tag,
-        tag.path);    
+        ent,
+        ent.path);    
     }    
   }
 }
 
 
-/**
- * Принимает имя сущености, тип, дополнение, 
- * затем меняет имя по шаблону.
-**/
-function beautifyName(name, type, subtype) {
-  var prefix = ''; 
-  var sep = ' - ';
+// Получате спискок соответствий и преобразует имя.
+function TRFNAME(name, type, sep) {
+  var prefix = RULES[type.trim()];
+  var re = new RegExp("^" + prefix);
   
-  name = name.charAt(0).toUpperCase() + name.substr(1);
-  
-  switch (type) {
-    case 'ua':
-      if (subtype === 'TRACK_EVENT') {
-        prefix = 'GA Event';
-      }  else if (subtype === 'TRACK_PAGEVIEW') {
-        prefix = 'GA Pageview';
-      }
-      break;
-    case 'html':
-      prefix = 'Script';
-      break;
-    default:
-      prefix = ''
+  if (!re.test(name)) {   
+    return prefix + sep + name; 
+  }  
       
-  }
-  
-  if (!name.match(prefix)) {    
-    return prefix + sep + name;
+}
+
+
+// Находит лист по имени и обнуляет его.
+function refreshList(name) {
+  sheet = SPSHEET.getSheetByName(name)
+  if (!!sheet) {
+    sheet.clear();
   } else {
-    return '';
-  }
-  
+     sheet = SPSHEET.insertSheet(name);
+  } 
 }
